@@ -35,9 +35,6 @@ jobs:
 
       - name: Generate package indexes
         run: |
-          mkdir -p dists/stable/main/binary-amd64
-          mkdir -p dists/stable/main/binary-arm64
-
           dpkg-scanpackages --arch amd64 pool/main /dev/null > dists/stable/main/binary-amd64/Packages
           gzip -9 -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
 
@@ -123,6 +120,7 @@ jobs:
   deploy:
     name: Deploy GitHub Pages
     needs: publish
+    if: ${{ success() }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
