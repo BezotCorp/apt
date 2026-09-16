@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Official BezotCorp APT repository for Debian, Ubuntu, Kubuntu, and compatible Debian-based systems.">
+  <title>BezotCorp APT Repository</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #0f172a 0%, #111827 55%, #1f2937 100%);
+    }
+
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 72px 24px;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 20px;
+      padding: 36px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      line-height: 1.05;
+    }
+
+    h2 {
+      margin-top: 34px;
+      font-size: 1.2rem;
+    }
+
+    p, li {
+      color: #cbd5e1;
+      line-height: 1.7;
+    }
+
+    code {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.15rem 0.4rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    a.button {
+      display: inline-block;
+      padding: 11px 16px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid #64748b;
+      color: #f8fafc;
+      background: #1e293b;
+    }
+
+    a.button:hover {
+      background: #334155;
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <p class="muted">Official package infrastructure</p>
+      <h1>BezotCorp APT Repository</h1>
+      <p>
+        This endpoint hosts official BezotCorp Debian packages and the metadata required by APT.
+        It is intended for Debian, Ubuntu, Kubuntu, and compatible Debian-based systems.
+      </p>
+
+      <h2>Repository design</h2>
+      <ul>
+        <li>Stable channel: <code>stable</code></li>
+        <li>Component: <code>main</code></li>
+        <li>Prepared architectures: <code>amd64</code> and <code>arm64</code></li>
+        <li>Repository metadata is generated and cryptographically signed by BezotCorp.</li>
+      </ul>
+
+      <h2>Packages</h2>
+      <p>
+        Packages are published here by their respective BezotCorp projects. The repository itself
+        remains product-agnostic and rebuilds its global APT indexes whenever a Debian package is published.
+      </p>
+
+      <div class="actions">
+        <a class="button" href="https://bezotcorp.com">Visit BezotCorp</a>
+        <a class="button" href="https://github.com/BezotCorp/apt">View repository on GitHub</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
