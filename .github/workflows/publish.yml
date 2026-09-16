@@ -1,0 +1,134 @@
+name: Publish APT Repository
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "pool/**/*.deb"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-repository-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Generate and sign repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils dpkg-dev gnupg
+
+      - name: Generate package indexes
+        run: |
+          mkdir -p dists/stable/main/binary-amd64
+          mkdir -p dists/stable/main/binary-arm64
+
+          dpkg-scanpackages --arch amd64 pool/main /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -9 -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+          dpkg-scanpackages --arch arm64 pool/main /dev/null > dists/stable/main/binary-arm64/Packages
+          gzip -9 -c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
+
+      - name: Generate release metadata
+        run: |
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="BezotCorp" \
+            -o APT::FTPArchive::Release::Label="BezotCorp" \
+            -o APT::FTPArchive::Release::Suite="stable" \
+            -o APT::FTPArchive::Release::Codename="stable" \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+            -o APT::FTPArchive::Release::Components="main" \
+            -o APT::FTPArchive::Release::Description="BezotCorp APT Repository" \
+            release dists/stable > dists/stable/Release
+
+      - name: Import repository signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign release metadata
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          APT_GPG_FINGERPRINT: AC76036987FA2356017855259BBA7F55C411EFC8
+        run: |
+          gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase "$APT_GPG_PASSPHRASE" \
+            --local-user "$APT_GPG_FINGERPRINT" \
+            --clearsign \
+            --output dists/stable/InRelease \
+            dists/stable/Release
+
+          gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase "$APT_GPG_PASSPHRASE" \
+            --local-user "$APT_GPG_FINGERPRINT" \
+            --armor \
+            --detach-sign \
+            --output dists/stable/Release.gpg \
+            dists/stable/Release
+
+      - name: Commit repository metadata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dists/stable
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: refresh repository metadata"
+            git push
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare GitHub Pages content
+        run: |
+          mkdir -p _site
+          cp -a dists _site/
+          cp -a pool _site/
+          cp -a public _site/
+
+          if [ -f index.html ]; then
+            cp index.html _site/index.html
+          fi
+
+          touch _site/.nojekyll
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
