@@ -41,6 +41,9 @@ jobs:
           dpkg-scanpackages --arch arm64 pool/main /dev/null > dists/stable/main/binary-arm64/Packages
           gzip -9 -c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
 
+      - name: Generate bug report form
+        run: python3 scripts/generate-bug-report-form.py
+
       - name: Generate release metadata
         run: |
           apt-ftparchive \
@@ -85,14 +88,18 @@ jobs:
             --output dists/stable/Release.gpg \
             dists/stable/Release
 
-      - name: Commit repository metadata
+      - name: Commit generated repository files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dists/stable
 
+          if [ -f .github/ISSUE_TEMPLATE/bug-report.yml ]; then
+            git add .github/ISSUE_TEMPLATE/bug-report.yml
+          fi
+
           if ! git diff --cached --quiet; then
-            git commit -m "chore: refresh repository metadata"
+            git commit -m "chore: refresh generated repository files"
             git push
           fi
 
