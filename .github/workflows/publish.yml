@@ -41,7 +41,7 @@ jobs:
           dpkg-scanpackages --arch arm64 pool/main /dev/null > dists/stable/main/binary-arm64/Packages
           gzip -9 -c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
 
-      - name: Generate bug report form
+      - name: Generate bug report forms
         run: python3 scripts/generate-bug-report-form.py
 
       - name: Generate release metadata
@@ -93,10 +93,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add dists/stable
-
-          if [ -f .github/ISSUE_TEMPLATE/bug-report.yml ]; then
-            git add .github/ISSUE_TEMPLATE/bug-report.yml
-          fi
+          git add -A .github/ISSUE_TEMPLATE
 
           if ! git diff --cached --quiet; then
             git commit -m "chore: refresh generated repository files"
