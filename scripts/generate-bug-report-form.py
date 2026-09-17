@@ -1,9 +1,13 @@
+from functools import cmp_to_key
 from pathlib import Path
 import json
+import re
 import subprocess
 
 POOL = Path("pool/main")
-OUTPUT = Path(".github/ISSUE_TEMPLATE/bug-report.yml")
+OUTPUT_DIR = Path(".github/ISSUE_TEMPLATE")
+GENERATED_PREFIX = "bug-package-"
+LEGACY_OUTPUT = OUTPUT_DIR / "bug-report.yml"
 
 
 def field(package: Path, name: str) -> str:
@@ -16,42 +20,50 @@ def field(package: Path, name: str) -> str:
     return result.stdout.strip()
 
 
-packages = sorted(POOL.rglob("*.deb"))
+def version_compare(left: str, right: str) -> int:
+    if subprocess.run(["dpkg", "--compare-versions", left, "gt", right]).returncode == 0:
+        return -1
+    if subprocess.run(["dpkg", "--compare-versions", left, "lt", right]).returncode == 0:
+        return 1
+    return 0
 
-if not packages:
-    print("No Debian packages found; bug report form was not generated.")
-else:
-    entries = {
-        (
-            field(package, "Package"),
-            field(package, "Version"),
-            field(package, "Architecture"),
-        )
-        for package in packages
-    }
 
-    options = "\n".join(
-        f"          - {json.dumps(f'{package} — {version} ({architecture})')}"
-        for package, version, architecture in sorted(entries)
-    )
+def slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
-    form = (
-        "name: Bug report\n"
-        "description: Report a bug affecting a BezotCorp package distributed through the APT repository.\n"
-        "title: \"[Bug] \"\n"
+
+def yaml_options(values: list[str]) -> str:
+    return "\n".join(f"          - {json.dumps(value)}" for value in values)
+
+
+def build_form(package: str, versions: list[str], architectures: list[str]) -> str:
+    return (
+        f"name: {json.dumps(f'Bug report — {package}')}\n"
+        f"description: {json.dumps(f'Report a bug affecting {package}.')}\n"
+        f"title: {json.dumps(f'[Bug][{package}] ')}\n"
         "body:\n"
         "  - type: markdown\n"
         "    attributes:\n"
         "      value: |\n"
-        "        Select the exact package build you are using, then describe the problem.\n"
+        f"        Report a problem affecting `{package}`. Select the installed version and architecture, then describe what happened.\n"
         "\n"
         "  - type: dropdown\n"
-        "    id: package-build\n"
+        "    id: version\n"
         "    attributes:\n"
-        "      label: Package / version / architecture\n"
-        "      description: This list is generated automatically from packages published in the BezotCorp APT repository.\n"
+        "      label: Version\n"
+        "      description: Select the installed package version. This list is generated automatically from the BezotCorp APT repository.\n"
         "      options:\n"
-        f"{options}\n"
+        f"{yaml_options(versions)}\n"
+        "    validations:\n"
+        "      required: true\n"
+        "\n"
+        "  - type: dropdown\n"
+        "    id: architecture\n"
+        "    attributes:\n"
+        "      label: Architecture\n"
+        "      description: Select the architecture of the installed package.\n"
+        "      options:\n"
+        f"{yaml_options(architectures)}\n"
         "    validations:\n"
         "      required: true\n"
         "\n"
@@ -106,6 +118,38 @@ else:
         "      description: Add any other information that may help reproduce or diagnose the problem.\n"
     )
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(form, encoding="utf-8")
-    print(f"Generated {OUTPUT} with {len(entries)} package build option(s).")
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+for generated_form in OUTPUT_DIR.glob(f"{GENERATED_PREFIX}*.yml"):
+    generated_form.unlink()
+
+if LEGACY_OUTPUT.exists():
+    LEGACY_OUTPUT.unlink()
+
+products: dict[str, dict[str, set[str]]] = {}
+
+for package_path in sorted(POOL.rglob("*.deb")):
+    package = field(package_path, "Package")
+    version = field(package_path, "Version")
+    architecture = field(package_path, "Architecture")
+
+    product = products.setdefault(package, {"versions": set(), "architectures": set()})
+    product["versions"].add(version)
+    product["architectures"].add(architecture)
+
+if not products:
+    print("No Debian packages found; generated bug report forms were removed.")
+else:
+    for package, product in sorted(products.items()):
+        versions = sorted(product["versions"], key=cmp_to_key(version_compare))
+        architectures = sorted(product["architectures"])
+        output = OUTPUT_DIR / f"{GENERATED_PREFIX}{slug(package)}.yml"
+        output.write_text(
+            build_form(package, versions, architectures),
+            encoding="utf-8",
+        )
+        print(
+            f"Generated {output} with {len(versions)} version(s) "
+            f"and {len(architectures)} architecture(s)."
+        )
