@@ -33,72 +33,88 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apt-utils dpkg-dev gnupg
 
-      - name: Generate package indexes
-        run: |
-          dpkg-scanpackages --arch amd64 pool/main /dev/null > dists/stable/main/binary-amd64/Packages
-          gzip -9 -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
-
-          dpkg-scanpackages --arch arm64 pool/main /dev/null > dists/stable/main/binary-arm64/Packages
-          gzip -9 -c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
-
-      - name: Generate bug report forms
-        run: python3 scripts/generate-bug-report-form.py
-
-      - name: Generate release metadata
-        run: |
-          apt-ftparchive \
-            -o APT::FTPArchive::Release::Origin="BezotCorp" \
-            -o APT::FTPArchive::Release::Label="BezotCorp" \
-            -o APT::FTPArchive::Release::Suite="stable" \
-            -o APT::FTPArchive::Release::Codename="stable" \
-            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
-            -o APT::FTPArchive::Release::Components="main" \
-            -o APT::FTPArchive::Release::Description="BezotCorp APT Repository" \
-            release dists/stable > dists/stable/Release
-
       - name: Import repository signing key
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
         run: |
           printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
 
-      - name: Sign release metadata
+      - name: Generate, sign and publish repository metadata
         env:
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
           APT_GPG_FINGERPRINT: AC76036987FA2356017855259BBA7F55C411EFC8
         run: |
-          gpg \
-            --batch \
-            --yes \
-            --pinentry-mode loopback \
-            --passphrase "$APT_GPG_PASSPHRASE" \
-            --local-user "$APT_GPG_FINGERPRINT" \
-            --clearsign \
-            --output dists/stable/InRelease \
-            dists/stable/Release
-
-          gpg \
-            --batch \
-            --yes \
-            --pinentry-mode loopback \
-            --passphrase "$APT_GPG_PASSPHRASE" \
-            --local-user "$APT_GPG_FINGERPRINT" \
-            --armor \
-            --detach-sign \
-            --output dists/stable/Release.gpg \
-            dists/stable/Release
-
-      - name: Commit generated repository files
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dists/stable
-          git add -A .github/ISSUE_TEMPLATE
 
-          if ! git diff --cached --quiet; then
+          max_attempts=5
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+
+            dpkg-scanpackages --arch amd64 pool/main /dev/null > dists/stable/main/binary-amd64/Packages
+            gzip -9 -c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+            dpkg-scanpackages --arch arm64 pool/main /dev/null > dists/stable/main/binary-arm64/Packages
+            gzip -9 -c dists/stable/main/binary-arm64/Packages > dists/stable/main/binary-arm64/Packages.gz
+
+            python3 scripts/generate-bug-report-form.py
+
+            apt-ftparchive \
+              -o APT::FTPArchive::Release::Origin="BezotCorp" \
+              -o APT::FTPArchive::Release::Label="BezotCorp" \
+              -o APT::FTPArchive::Release::Suite="stable" \
+              -o APT::FTPArchive::Release::Codename="stable" \
+              -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+              -o APT::FTPArchive::Release::Components="main" \
+              -o APT::FTPArchive::Release::Description="BezotCorp APT Repository" \
+              release dists/stable > dists/stable/Release
+
+            gpg \
+              --batch \
+              --yes \
+              --pinentry-mode loopback \
+              --passphrase "$APT_GPG_PASSPHRASE" \
+              --local-user "$APT_GPG_FINGERPRINT" \
+              --clearsign \
+              --output dists/stable/InRelease \
+              dists/stable/Release
+
+            gpg \
+              --batch \
+              --yes \
+              --pinentry-mode loopback \
+              --passphrase "$APT_GPG_PASSPHRASE" \
+              --local-user "$APT_GPG_FINGERPRINT" \
+              --armor \
+              --detach-sign \
+              --output dists/stable/Release.gpg \
+              dists/stable/Release
+
+            git add dists/stable
+            git add -A .github/ISSUE_TEMPLATE
+
+            if git diff --cached --quiet; then
+              echo "Repository metadata already matches the latest APT main."
+              break
+            fi
+
             git commit -m "chore: refresh generated repository files"
-            git push
-          fi
+
+            if git push origin HEAD:main; then
+              echo "Published repository metadata from latest APT main."
+              break
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "APT main kept moving during metadata publication." >&2
+              exit 1
+            fi
+
+            echo "APT main moved during metadata publication; regenerating from latest main ($attempt/$max_attempts)."
+          done
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

@@ -9,5 +9,8 @@ This repository contains distribution artifacts and APT metadata only. Product s
 - `pool/main/` stores published Debian packages, grouped by package.
 - `dists/stable/` stores APT metadata for the stable channel.
 - `public/` stores public repository-signing material.
+- `transactions/` stores durable release-transaction metadata used to resume a product release after its Debian artifact has been published.
+
+Only distribution content is copied to GitHub Pages; release transactions remain repository metadata.
 
 The repository is designed for multiple BezotCorp products, versions, and architectures.
